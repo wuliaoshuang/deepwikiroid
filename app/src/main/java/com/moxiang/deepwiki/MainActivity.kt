@@ -22,6 +22,8 @@ import com.moxiang.deepwiki.core.ui.theme.DeepWikiTheme
 import com.moxiang.deepwiki.core.ui.theme.LocalThemeStore
 import com.moxiang.deepwiki.core.ui.theme.ThemeMode
 import com.moxiang.deepwiki.core.ui.theme.ThemePreferenceStore
+import com.moxiang.deepwiki.core.ui.translation.LocalTranslationStore
+import com.moxiang.deepwiki.core.ui.translation.TranslationPreferenceStore
 
 /**
  * MainActivity - Entry point for DeepWiki app
@@ -36,6 +38,7 @@ class MainActivity : AppCompatActivity() {
             val themeStore = remember { ThemePreferenceStore(context.applicationContext) }
             val languageStore = remember { LanguagePreferenceStore(context.applicationContext) }
             val scriptStore = remember { ScriptPreferenceStore(context.applicationContext) }
+            val translationStore = remember { TranslationPreferenceStore(context.applicationContext) }
             val themeMode by themeStore.themeModeFlow.collectAsState(initial = ThemeMode.SYSTEM)
             val languageMode by languageStore.languageFlow.collectAsState(initial = AppLanguage.defaultForLocale())
             val darkTheme = when (themeMode) {
@@ -54,7 +57,8 @@ class MainActivity : AppCompatActivity() {
             CompositionLocalProvider(
                 LocalThemeStore provides themeStore,
                 LocalLanguageStore provides languageStore,
-                LocalScriptStore provides scriptStore
+                LocalScriptStore provides scriptStore,
+                LocalTranslationStore provides translationStore
             ) {
                 DeepWikiTheme(darkTheme = darkTheme) {
                     MainNavigation()

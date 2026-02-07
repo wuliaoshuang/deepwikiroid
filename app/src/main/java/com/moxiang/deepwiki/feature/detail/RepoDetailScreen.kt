@@ -34,6 +34,9 @@ import com.moxiang.deepwiki.core.ui.components.PressableIconButton
 import com.moxiang.deepwiki.core.ui.components.pressable
 import com.moxiang.deepwiki.core.ui.theme.*
 import com.moxiang.deepwiki.data.model.WikiMenuDto
+import com.moxiang.deepwiki.core.ui.translation.LocalTranslationStore
+import com.moxiang.deepwiki.core.ui.translation.TranslationService
+import com.moxiang.deepwiki.core.ui.utils.showToast
 import com.moxiang.deepwiki.feature.browser.ReaderWebView
 import kotlinx.coroutines.launch
 import android.widget.Toast
@@ -71,6 +74,43 @@ fun RepoDetailScreen(
     var showBottomSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    // Translation state
+    val translationStore = LocalTranslationStore.current
+    val translationApiKey by translationStore.apiKeyFlow.collectAsState(initial = "")
+    val translationTargetLang by translationStore.targetLanguageFlow.collectAsState(initial = "Chinese")
+    val translationEnabled by translationStore.enabledFlow.collectAsState(initial = false)
+    var isTranslating by remember { mutableStateOf(false) }
+    var translationProgress by remember { mutableStateOf("0/0") }
+    val translationService = remember { TranslationService() }
+
+    fun handleTranslate() {
+        val webView = webViewRef.value ?: return
+
+        if (translationApiKey.isBlank()) {
+            context.showToast("请先在设置中配置 DeepSeek API Key")
+            return
+        }
+
+        scope.launch {
+            isTranslating = true
+            try {
+                translationService.translatePage(
+                    webView = webView,
+                    apiKey = translationApiKey,
+                    targetLang = translationTargetLang,
+                    onProgress = { current, total ->
+                        translationProgress = "$current/$total"
+                    }
+                ).onFailure { error ->
+                    android.util.Log.e("Translation", "翻译失败", error)
+                    context.showToast("翻译失败: ${error.message}")
+                }
+            } finally {
+                isTranslating = false
+            }
+        }
+    }
+
     LaunchedEffect(repoName) {
         viewModel.fetchDocument(repoName)
         val fallbackDescription = repoDescription?.takeIf { it.isNotBlank() }?.take(120).orEmpty()
@@ -80,6 +120,9 @@ fun RepoDetailScreen(
     val currentDocument = (uiState as? DetailUiState.Success)?.document
     LaunchedEffect(currentDocument?.htmlUrl) {
         injectedTitle = null
+        // 切换文档时重置翻译状态
+        isTranslating = false
+        translationProgress = "0/0"
     }
     val displayTitle = injectedTitle ?: currentDocument?.title ?: repoName
     val displayMenuItems = currentDocument?.menuItems.orEmpty()
@@ -213,6 +256,10 @@ fun RepoDetailScreen(
                 onForward = { webViewRef.value?.goForward() },
                 onRefresh = { webViewRef.value?.reload() },
                 onStop = { webViewRef.value?.stopLoading() },
+                onTranslate = { handleTranslate() },
+                isTranslating = isTranslating,
+                // 加载中禁用翻译，且必须配置了 Key
+                translationEnabled = !isLoading && translationEnabled && translationApiKey.isNotBlank(),
                 onCopy = {
                     clipboard.setText(AnnotatedString(currentDocument?.htmlUrl.orEmpty()))
                     Toast.makeText(context, linkCopiedText, Toast.LENGTH_SHORT).show()

@@ -1,5 +1,5 @@
 # DeepWiki
-
+<img src="./md-img/APP-Banner.png"/>
 一个基于 Jetpack Compose 构建的现代化 Android 应用，提供优雅的文档浏览和管理体验。
 
 ## 特性

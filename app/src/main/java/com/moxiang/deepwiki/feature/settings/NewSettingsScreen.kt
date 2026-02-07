@@ -27,6 +27,9 @@ import com.moxiang.deepwiki.core.ui.locale.AppLanguage
 import com.moxiang.deepwiki.core.ui.locale.LocalLanguageStore
 import com.moxiang.deepwiki.core.ui.scripts.LocalScriptStore
 import com.moxiang.deepwiki.core.ui.theme.*
+import com.moxiang.deepwiki.core.ui.translation.LocalTranslationStore
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import kotlin.collections.listOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -48,9 +51,14 @@ fun NewSettingsScreen(
     val scriptStore = LocalScriptStore.current
     val scripts by scriptStore.scriptsFlow.collectAsState(initial = emptyList())
     val builtinEnabled by scriptStore.builtinReaderEnabledFlow.collectAsState(initial = true)
+    val translationStore = LocalTranslationStore.current
+    val translationApiKey by translationStore.apiKeyFlow.collectAsState(initial = "")
+    val translationTargetLang by translationStore.targetLanguageFlow.collectAsState(initial = "Chinese")
+    val translationEnabled by translationStore.enabledFlow.collectAsState(initial = false)
     val scope = rememberCoroutineScope()
     var showThemeDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showTranslationDialog by remember { mutableStateOf(false) }
     val navBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val tabBarPadding = 106.dp
     val themeLabel = when (themeMode) {
@@ -152,6 +160,27 @@ fun NewSettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
+            // Translation Section
+            item {
+                SectionLabel("Translation Settings")
+            }
+
+            item {
+                SettingsCard {
+                    SettingsRow(
+                        icon = Icons.Default.Translate,
+                        title = "Translation",
+                        value = if (translationEnabled) "Enabled" else "Disabled",
+                        showChevron = true,
+                        onClick = { showTranslationDialog = true }
+                    )
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
             // Storage Section
             item {
                 SectionLabel(stringResource(id = R.string.settings_section_storage))
@@ -200,7 +229,7 @@ fun NewSettingsScreen(
                         icon = Icons.Default.Code,
                         title = stringResource(id = R.string.settings_github_repo),
                         value = null,
-                        showChevron = true,
+                        showChevron = false,
                         showExternalIcon = true,
                         onClick = { /* TODO */ }
                     )
@@ -296,6 +325,162 @@ fun NewSettingsScreen(
             }
         )
     }
+
+    if (showTranslationDialog) {
+        TranslationSettingsDialog(
+            apiKey = translationApiKey,
+            targetLanguage = translationTargetLang,
+            enabled = translationEnabled,
+            onDismiss = { showTranslationDialog = false },
+            onSave = { newApiKey, newTargetLang, newEnabled ->
+                scope.launch {
+                    translationStore.setApiKey(newApiKey)
+                    translationStore.setTargetLanguage(newTargetLang)
+                    translationStore.setEnabled(newEnabled)
+                }
+                showTranslationDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun TranslationSettingsDialog(
+    apiKey: String,
+    targetLanguage: String,
+    enabled: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String, String, Boolean) -> Unit
+) {
+    var editApiKey by remember { mutableStateOf(apiKey) }
+    var editTargetLang by remember { mutableStateOf(targetLanguage) }
+    var editEnabled by remember { mutableStateOf(enabled) }
+    var showApiKey by remember { mutableStateOf(false) }
+    var expandedLang by remember { mutableStateOf(false) }
+
+    val languages = listOf(
+        "Chinese" to "中文",
+        "English" to "English",
+        "Japanese" to "日本語",
+        "Korean" to "한국어",
+        "French" to "Français",
+        "German" to "Deutsch",
+        "Spanish" to "Español"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Translation Settings") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Enable Switch
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Enable Translation", fontSize = 15.sp)
+                    Switch(
+                        checked = editEnabled,
+                        onCheckedChange = { editEnabled = it }
+                    )
+                }
+
+                // API Key Input
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "DeepSeek API Key",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = editApiKey,
+                        onValueChange = { editApiKey = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showApiKey = !showApiKey }) {
+                                Icon(
+                                    imageVector = if (showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (showApiKey) "Hide API Key" else "Show API Key"
+                                )
+                            }
+                        },
+                        placeholder = { Text("sk-...") },
+                        singleLine = true
+                    )
+                }
+
+                // Target Language Dropdown
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Target Language",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Box {
+                        OutlinedTextField(
+                            value = languages.find { it.first == editTargetLang }?.second ?: editTargetLang,
+                            onValueChange = {},
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .pressable(onClick = { expandedLang = true }),
+                            readOnly = true,
+                            enabled = false,
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select language"
+                                )
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                        DropdownMenu(
+                            expanded = expandedLang,
+                            onDismissRequest = { expandedLang = false }
+                        ) {
+                            languages.forEach { (code, displayName) ->
+                                DropdownMenuItem(
+                                    text = { Text(displayName) },
+                                    onClick = {
+                                        editTargetLang = code
+                                        expandedLang = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Help text
+                Text(
+                    "Get your API key from https://platform.deepseek.com",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+            }
+        },
+        confirmButton = {
+            PressableTextButton(
+                onClick = { onSave(editApiKey, editTargetLang, editEnabled) }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            PressableTextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

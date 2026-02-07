@@ -27,6 +27,10 @@ import com.moxiang.deepwiki.core.ui.components.MainHeader
 import com.moxiang.deepwiki.core.ui.components.PressableIconButton
 import com.moxiang.deepwiki.core.ui.theme.Purple500
 import com.moxiang.deepwiki.core.ui.theme.Purple700
+import com.moxiang.deepwiki.core.ui.translation.LocalTranslationStore
+import com.moxiang.deepwiki.core.ui.translation.TranslationService
+import com.moxiang.deepwiki.core.ui.utils.showToast
+import kotlinx.coroutines.launch
 
 @Composable
 fun BrowserTestScreen(
@@ -46,6 +50,45 @@ fun BrowserTestScreen(
     var defaultUa by remember { mutableStateOf<String?>(null) }
     var useAndroidUa by remember { mutableStateOf(true) }
     val linkCopiedText = stringResource(id = R.string.link_copied)
+
+    // Translation state
+    val translationStore = LocalTranslationStore.current
+    val translationApiKey by translationStore.apiKeyFlow.collectAsState(initial = "")
+    val translationTargetLang by translationStore.targetLanguageFlow.collectAsState(initial = "Chinese")
+    val translationEnabled by translationStore.enabledFlow.collectAsState(initial = false)
+    var isTranslating by remember { mutableStateOf(false) }
+    var translationProgress by remember { mutableStateOf("0/0") }
+    val translationService = remember { TranslationService() }
+    val scope = rememberCoroutineScope()
+
+    fun handleTranslate() {
+        val webView = webViewRef.value ?: return
+
+        if (translationApiKey.isBlank()) {
+            context.showToast("请先在设置中配置 DeepSeek API Key")
+            return
+        }
+
+        scope.launch {
+            isTranslating = true
+            try {
+                translationService.translatePage(
+                    webView = webView,
+                    apiKey = translationApiKey,
+                    targetLang = translationTargetLang,
+                    onProgress = { current, total ->
+                        translationProgress = "$current/$total"
+                    }
+                ).onFailure { error ->
+                    // 只在失败时显示错误，不打断正常翻译
+                    android.util.Log.e("Translation", "翻译失败", error)
+                    context.showToast("翻译失败: ${error.message}")
+                }
+            } finally {
+                isTranslating = false
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -98,12 +141,15 @@ fun BrowserTestScreen(
                 canGoBack = canGoBack,
                 canGoForward = canGoForward,
                 isLoading = isLoading,
+                isTranslating = isTranslating,
+                translationEnabled = translationEnabled && translationApiKey.isNotBlank(),
                 title = pageTitle,
                 url = currentUrl,
                 onBack = { webViewRef.value?.goBack() },
                 onForward = { webViewRef.value?.goForward() },
                 onRefresh = { webViewRef.value?.reload() },
                 onStop = { webViewRef.value?.stopLoading() },
+                onTranslate = { handleTranslate() },
                 onCopy = {
                     clipboard.setText(AnnotatedString(currentUrl))
                     Toast.makeText(context, linkCopiedText, Toast.LENGTH_SHORT).show()

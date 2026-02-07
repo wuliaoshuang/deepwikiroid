@@ -26,7 +26,10 @@ fun BrowserControls(
     onRefresh: () -> Unit,
     onStop: () -> Unit,
     onCopy: () -> Unit,
-    onOpenExternal: () -> Unit
+    onOpenExternal: () -> Unit,
+    isTranslating: Boolean = false,
+    translationEnabled: Boolean = false,
+    onTranslate: () -> Unit = {}
 ) {
     Surface(
         tonalElevation = 8.dp,
@@ -92,6 +95,16 @@ fun BrowserControls(
                     onClick = if (isLoading) onStop else onRefresh,
                     isPrimary = true
                 )
+
+                // Translation button (conditionally shown)
+                if (translationEnabled) {
+                    BrowserActionButton(
+                        icon = if (isTranslating) Icons.Default.HourglassEmpty else Icons.Default.Translate,
+                        contentDescription = "Translate",
+                        enabled = !isTranslating,
+                        onClick = onTranslate
+                    )
+                }
 
                 BrowserActionButton(
                     icon = Icons.Default.ContentCopy,
